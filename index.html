@@ -66,6 +66,15 @@ td.bad{color:#ff7b7b}
 #menu.open{display:flex}
 #menu .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;width:min(420px,100%);display:flex;flex-direction:column;gap:10px}
 #menu h3{margin:0 0 2px;font-size:15px}
+#conv{position:fixed;inset:0;background:#0008;display:none;align-items:flex-start;justify-content:center;z-index:11;padding:50px 12px;overflow:auto}
+#conv.open{display:flex}
+#conv .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;width:min(520px,100%);display:flex;flex-direction:column;gap:10px}
+#conv h3{margin:0;font-size:15px}
+#cvInfo{font-size:13px;line-height:1.5}
+#cvInfo .ok{color:#7bd88f}#cvInfo .bad{color:#ff7b7b}
+#cvInfo code{user-select:all;font-size:11px;word-break:break-all}
+#cvProg{width:100%;height:8px;accent-color:var(--accent)}
+#cvStatus{font-size:12px;word-break:break-word;color:var(--muted);min-height:16px}
 #toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--accent);padding:8px 14px;border-radius:8px;display:none;z-index:20;max-width:90%}
 #restore{display:none;background:#3a3420;padding:6px 10px;gap:8px;align-items:center;flex-wrap:wrap}
 .hidden{display:none!important}
@@ -97,6 +106,7 @@ td.bad{color:#ff7b7b}
     <button id="bSave" class="primary">💾 Zapisz</button>
     <button id="bUndo" title="Ctrl+Z">↶</button>
     <button id="bRedo" title="Ctrl+Y">↷</button>
+    <button id="bConv" title="Konwerter MKV → MP4 / wyciąganie napisów">🔄 MKV</button>
     <button id="bMenu">☰</button>
     <span class="sep"></span>
     <span id="fname">brak pliku</span>
@@ -186,6 +196,20 @@ td.bad{color:#ff7b7b}
     <h3>Skróty (klawiatura)</h3>
     <div style="color:var(--muted);font-size:12px">Spacja (poza polem tekstu) – play/pauza · Alt+↑/↓ – poprz./nast. linia · Enter w tekście – następna linia (Shift+Enter = nowa linia) · Alt+[ / Alt+] – start/koniec z wideo · Alt+P – odtwórz linię · Ctrl+S – zapisz · Ctrl+Z/Y – cofnij/ponów · ←/→ – klatka</div>
     <div class="row" style="justify-content:flex-end"><button id="bCloseMenu" class="primary">Zamknij</button></div>
+  </div>
+</div>
+<div id="conv">
+  <div class="card">
+    <h3>Konwerter MKV</h3>
+    <div style="font-size:12px;color:var(--muted)">Działa w przeglądarce, plik nie jest nigdzie wysyłany. Przy pierwszym użyciu pobiera ok. 30 MB (ffmpeg).</div>
+    <div class="row"><button id="cvPick" class="primary">Wybierz plik MKV…</button><span id="cvName" style="font-size:12px;color:var(--muted)"></span></div>
+    <input type="file" id="cvIn" class="hidden">
+    <div id="cvInfo"></div>
+    <div class="row hidden" id="cvSubsRow"><select id="cvSubs" style="flex:1"></select><button id="cvLoadSubs">Wczytaj napisy do edytora</button></div>
+    <div class="row hidden" id="cvRemuxRow"><button id="cvRemux" class="primary">Przepakuj do MP4 i otwórz</button><a id="cvDl" class="hidden"><button>Pobierz MP4</button></a></div>
+    <progress id="cvProg" class="hidden" max="1" value="0"></progress>
+    <div id="cvStatus"></div>
+    <div class="row" style="justify-content:flex-end"><button id="cvClose">Zamknij</button></div>
   </div>
 </div>
 <div id="toast"></div>
@@ -505,6 +529,7 @@ $('bOpenVideo').onclick = ()=> $('inVideo').click();
 $('inVideo').onchange = e=>{
   const f = e.target.files[0]; if(!f) return;
   if(video.src) URL.revokeObjectURL(video.src);
+  lastVideoFile = f;
   video.src = URL.createObjectURL(f);
   $('noVideo').textContent = 'Wczytywanie…';
   video.onloadedmetadata = ()=>{
@@ -514,10 +539,11 @@ $('inVideo').onchange = e=>{
   video.onloadeddata = ()=>{ if(!video.videoWidth) noPicture(); };
   video.onerror = ()=>{
     $('noVideo').style.display='flex';
-    $('noVideo').innerHTML = 'Ta przeglądarka nie odtworzy tego pliku.<br><small>Safari/iPhone nie obsługuje MKV, a niektóre kodeki (np. HEVC, 10-bit) nie działają w Chrome.<br>Przepakuj do MP4 bez utraty jakości:<br><code>ffmpeg -i plik.mkv -map 0:v:0 -map 0:a:0 -c copy plik.mp4</code></small>';
+    $('noVideo').innerHTML = 'Ta przeglądarka nie odtworzy tego pliku.<br><small>Safari/iPhone nie obsługuje MKV, a niektóre kodeki (np. HEVC, 10-bit) nie działają w Chrome.<br>Przepakuj do MP4 bez utraty jakości:<br><code>ffmpeg -i plik.mkv -map 0:v:0 -map 0:a:0 -c copy plik.mp4</code></small><br><button onclick="openConv(lastVideoFile)" style="margin-top:8px;pointer-events:auto">🔄 Otwórz konwerter z tym plikiem</button>';
   };
   e.target.value='';
 };
+let lastVideoFile = null;
 function noPicture(){
   $('noVideo').style.display='flex';
   $('noVideo').innerHTML = '<div><b>Dźwięk jest, ale przeglądarka nie umie zdekodować obrazu.</b><br><small>Najczęściej to HEVC (x265) albo 10-bitowe H.264 – typowe w anime.<br>Zrób lekką kopię roboczą (czasy zostają te same, napisy pasują 1:1):<br><code style="user-select:all">ffmpeg -i plik.mkv -map 0:v:0 -map 0:a:0 -vf scale=-2:540,format=yuv420p -c:v libx264 -preset veryfast -crf 26 -c:a aac -b:a 128k plik_robocza.mp4</code></small></div>';
@@ -684,8 +710,163 @@ let toastT; function toast(m){ const t=$('toast'); t.textContent=m; t.style.disp
 /* iOS: filtr typów wyszarza pliki .mkv – pokaż wszystkie */
 if(/iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1)) $('inVideo').removeAttribute('accept');
 
+
+/* ---------- konwerter MKV (ffmpeg.wasm, w przeglądarce) ---------- */
+const FF_BASE = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd/';
+const FF_WORKER_SRC = `
+let core;
+self.onmessage = async ({data:{id,cmd,args}}) => {
+  try{
+    if(cmd==='load'){
+      importScripts(args.coreURL);
+      core = await self.createFFmpegCore({mainScriptUrlOrBlob: args.coreURL + '#' + btoa(JSON.stringify({wasmURL: args.wasmURL}))});
+      core.setLogger(d=>self.postMessage({type:'log', msg:d.message}));
+      return self.postMessage({id, ok:true});
+    }
+    if(cmd==='mount'){
+      try{ core.FS.unmount('/in'); }catch(e){}
+      try{ core.FS.mkdir('/in'); }catch(e){}
+      core.FS.mount(core.FS.filesystems.WORKERFS, {files:[args]}, '/in');
+      return self.postMessage({id, ok:true});
+    }
+    if(cmd==='exec'){ core.setTimeout(-1); core.exec(...args); const ret = core.ret; core.reset(); return self.postMessage({id, ok:true, ret}); }
+    if(cmd==='read'){ const d = core.FS.readFile(args); try{ core.FS.unlink(args); }catch(e){} return self.postMessage({id, ok:true, data:d}, [d.buffer]); }
+  }catch(e){ self.postMessage({id, ok:false, err:String(e && e.message || e)}); }
+};`;
+let ffWorker = null, ffSeq = 0, ffOnLog = null; const ffPending = {};
+function ffCall(cmd, args){ return new Promise((res, rej)=>{ const id = ++ffSeq; ffPending[id] = {res, rej}; ffWorker.postMessage({id, cmd, args}); }); }
+async function ffLoad(){
+  if(ffWorker) return;
+  ffWorker = new Worker(URL.createObjectURL(new Blob([FF_WORKER_SRC], {type:'text/javascript'})));
+  ffWorker.onmessage = ({data})=>{
+    if(data.type==='log'){ ffOnLog && ffOnLog(data.msg); return; }
+    const p = ffPending[data.id]; if(!p) return; delete ffPending[data.id];
+    data.ok ? p.res(data) : p.rej(new Error(data.err));
+  };
+  ffWorker.onerror = e=>{ Object.values(ffPending).forEach(p=>p.rej(new Error(e.message||'błąd workera'))); };
+  try{ await ffCall('load', {coreURL: FF_BASE+'ffmpeg-core.js', wasmURL: FF_BASE+'ffmpeg-core.wasm'}); }
+  catch(e){ ffWorker.terminate(); ffWorker = null; throw e; }
+}
+async function ffExec(args, onLog){
+  const lines = []; ffOnLog = m=>{ lines.push(m); onLog && onLog(m); };
+  try{ const r = await ffCall('exec', args); return {ret:r.ret, log:lines.join('\n')}; }
+  finally{ ffOnLog = null; }
+}
+async function ffProbe(file){
+  await ffCall('mount', file);
+  const {log} = await ffExec(['-hide_banner', '-i', '/in/'+file.name]);
+  const info = {duration:0, video:null, audio:[], subs:[]};
+  const d = log.match(/Duration: (\d+):(\d+):(\d+\.\d+)/); if(d) info.duration = (+d[1]*60 + +d[2])*60 + +d[3];
+  let last = null;
+  for(const line of log.split('\n')){
+    const m = line.match(/Stream #0:(\d+)(?:\[[^\]]*\])?(?:\(([^)]*)\))?: (Video|Audio|Subtitle|Attachment): (\w+)(.*)/);
+    if(m){
+      last = {index:+m[1], lang:m[2]||'', codec:m[4], rest:m[5], title:''};
+      if(m[3]==='Video' && !info.video && !/attached pic/.test(line)) info.video = last;
+      else if(m[3]==='Audio') info.audio.push(last);
+      else if(m[3]==='Subtitle') info.subs.push(last);
+      continue;
+    }
+    const t = line.match(/^\s+title\s*:\s*(.*)$/); if(t && last) last.title = t[1].trim();
+  }
+  if(info.video){
+    info.video.tenBit = /p10|p12|High 10|Main 10/i.test(info.video.rest);
+    info.video.ok = info.video.codec==='h264' && !info.video.tenBit;
+  }
+  return info;
+}
+
+let cvFile = null, cvInfo = null, cvBusy = false, cvMp4Url = null;
+function cvStatus(t){ $('cvStatus').textContent = t; }
+function cvProgress(v){ const p=$('cvProg'); if(v==null){ p.classList.add('hidden'); } else { p.classList.remove('hidden'); if(v<0) p.removeAttribute('value'); else p.value=v; } }
+function openConv(file){ $('conv').classList.add('open'); closeMenu(); if(file && file!==cvFile) cvAnalyze(file); }
+$('bConv').onclick = ()=> openConv();
+$('cvClose').onclick = ()=> $('conv').classList.remove('open');
+$('cvPick').onclick = ()=> $('cvIn').click();
+$('cvIn').onchange = e=>{ const f=e.target.files[0]; e.target.value=''; if(f) cvAnalyze(f); };
+
+async function cvAnalyze(file){
+  if(cvBusy) return toast('Poczekaj na koniec bieżącej operacji');
+  cvBusy = true; cvFile = file; cvInfo = null;
+  $('cvName').textContent = `${file.name} (${(file.size/1048576).toFixed(0)} MB)`;
+  $('cvInfo').innerHTML = ''; $('cvSubsRow').classList.add('hidden'); $('cvRemuxRow').classList.add('hidden'); $('cvDl').classList.add('hidden');
+  try{
+    if(!ffWorker){ cvStatus('Pobieranie ffmpeg (ok. 30 MB, tylko za pierwszym razem)…'); cvProgress(-1); }
+    await ffLoad();
+    cvStatus('Analiza pliku…'); cvProgress(-1);
+    cvInfo = await ffProbe(file);
+    cvProgress(null); cvStatus('');
+    const v = cvInfo.video, html = [];
+    if(!v) html.push('<span class="bad">Nie znaleziono ścieżki wideo.</span>');
+    else{
+      const name = `${v.codec}${v.tenBit?' 10-bit':''}`;
+      if(v.ok) html.push(`Wideo: <b>${esc(name)}</b> – <span class="ok">da się szybko przepakować do MP4.</span>`);
+      else html.push(`Wideo: <b>${esc(name)}</b> – <span class="bad">przeglądarka tego nie odtworzy, a przekodowanie w przeglądarce trwałoby godzinami.</span><br>Zrób kopię roboczą na komputerze:<br><code>ffmpeg -i "${esc(file.name)}" -map 0:v:0 -map 0:a:0 -vf scale=-2:540,format=yuv420p -c:v libx264 -preset veryfast -crf 26 -c:a aac -b:a 128k robocza.mp4</code>`);
+    }
+    if(cvInfo.audio.length) html.push(`Audio: ${cvInfo.audio.map(a=>esc(a.codec)+(a.lang?` (${esc(a.lang)})`:'')).join(', ')} – przy przepakowaniu zamieniane na AAC.`);
+    html.push(cvInfo.subs.length ? `Napisy w pliku: <b>${cvInfo.subs.length}</b>` : 'Brak napisów w pliku.');
+    if(v && v.ok && file.size > 1.5*1073741824) html.push('<span class="bad">Uwaga: plik ma ponad 1,5 GB – telefon może nie mieć dość pamięci.</span>');
+    $('cvInfo').innerHTML = html.join('<br>');
+    if(v && v.ok) $('cvRemuxRow').classList.remove('hidden');
+    if(cvInfo.subs.length){
+      const sel = $('cvSubs'); sel.innerHTML = '';
+      cvInfo.subs.forEach((s,i)=>{ const o=document.createElement('option'); o.value=i; o.textContent=`#${i+1} ${s.codec}${s.lang?' · '+s.lang:''}${s.title?' · '+s.title:''}`; sel.appendChild(o); });
+      $('cvSubsRow').classList.remove('hidden');
+    }
+  }catch(e){
+    cvProgress(null);
+    cvStatus('Błąd: '+e.message+(navigator.onLine?'':' (brak internetu – konwerter potrzebuje sieci przy pierwszym użyciu)'));
+  }finally{ cvBusy = false; }
+}
+
+$('cvRemux').onclick = async ()=>{
+  if(cvBusy || !cvFile) return; cvBusy = true;
+  const dur = cvInfo.duration || 0;
+  try{
+    cvStatus('Przepakowywanie…'); cvProgress(dur ? 0 : -1);
+    const {ret} = await ffExec(['-hide_banner','-i','/in/'+cvFile.name,'-map','0:v:0','-map','0:a:0?','-c:v','copy','-c:a','aac','-b:a','160k','-sn','-dn','/out.mp4'], m=>{
+      const t = m.match(/time=(\d+):(\d+):(\d+\.\d+)/);
+      if(t && dur){ const sec=(+t[1]*60 + +t[2])*60 + +t[3]; cvProgress(Math.min(1, sec/dur)); cvStatus(`Przepakowywanie… ${Math.round(sec/dur*100)}%`); }
+    });
+    if(ret !== 0) throw new Error('ffmpeg zakończył się kodem '+ret);
+    cvStatus('Zapisywanie…');
+    const data = (await ffCall('read','/out.mp4')).data;
+    const mp4 = new File([data], cvFile.name.replace(/\.\w+$/,'')+'.mp4', {type:'video/mp4'});
+    if(cvMp4Url) URL.revokeObjectURL(cvMp4Url);
+    cvMp4Url = URL.createObjectURL(mp4);
+    const a = $('cvDl'); a.href = cvMp4Url; a.download = mp4.name; a.classList.remove('hidden');
+    // otwórz w edytorze
+    lastVideoFile = mp4;
+    if(video.src && video.src!==cvMp4Url) try{ URL.revokeObjectURL(video.src); }catch(e){}
+    $('noVideo').style.display='flex'; $('noVideo').textContent='Wczytywanie…';
+    video.src = cvMp4Url;
+    cvProgress(null); cvStatus(`Gotowe – ${mp4.name} (${(mp4.size/1048576).toFixed(0)} MB) otwarte w edytorze.`);
+    toast('Wideo przepakowane i wczytane');
+  }catch(e){ cvProgress(null); cvStatus('Błąd: '+e.message); }
+  finally{ cvBusy = false; }
+};
+
+$('cvLoadSubs').onclick = async ()=>{
+  if(cvBusy || !cvFile) return;
+  const i = +$('cvSubs').value, s = cvInfo.subs[i];
+  if(/pgs|dvd_sub|dvb_sub|hdmv/i.test(s.codec)) return cvStatus('To napisy obrazkowe (PGS/VobSub) – nie da się ich edytować jako tekst.');
+  if(dirty && !confirm('Zastąpić obecne napisy w edytorze? Niezapisane zmiany przepadną.')) return;
+  cvBusy = true;
+  try{
+    cvStatus('Wyciąganie napisów…'); cvProgress(-1);
+    const codec = /^(ass|ssa)$/.test(s.codec) ? 'copy' : 'ass';
+    const {ret} = await ffExec(['-hide_banner','-i','/in/'+cvFile.name,'-map','0:s:'+i,'-c:s',codec,'/out.ass']);
+    if(ret !== 0) throw new Error('ffmpeg zakończył się kodem '+ret);
+    const text = new TextDecoder('utf-8').decode((await ffCall('read','/out.ass')).data);
+    loadDoc(parseASS(text), cvFile.name.replace(/\.\w+$/,'')+(s.lang?'.'+s.lang:'')+'.ass');
+    cvProgress(null); cvStatus(`Wczytano ${doc.events.length} linii do edytora.`);
+    toast('Napisy wczytane z MKV');
+  }catch(e){ cvProgress(null); cvStatus('Błąd: '+e.message); }
+  finally{ cvBusy = false; }
+};
+
 /* ---------- tryb offline (PWA) ---------- */
-const APP_VERSION = '1.1';
+const APP_VERSION = '1.2';
 $('ver').textContent = 'v'+APP_VERSION;
 if('serviceWorker' in navigator && window.isSecureContext && location.protocol!=='file:'){
   navigator.serviceWorker.register('sw.js').then(reg=>{
