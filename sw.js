@@ -1,5 +1,5 @@
 // KaiMini service worker – zmień VERSION przy każdej aktualizacji
-const VERSION = 'kaimini-1.2';
+const VERSION = 'kaimini-1.3';
 const FF_CACHE = 'kaimini-ffmpeg-0.12.10';
 const FILES = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 

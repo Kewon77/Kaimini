@@ -60,6 +60,17 @@ tr{cursor:pointer}
 tr.on td{background:var(--active)}
 tr.sel td{background:var(--sel)!important}
 tr.cm td{color:var(--comment);font-style:italic}
+.col-o{display:none}
+table.tl .col-o{display:table-cell}
+table.tl col.col-o{display:table-column}
+td.col-o{color:var(--muted)}
+td.tlempty{background:#3a2222}
+#origBox{display:none;background:#16171a;border:1px dashed var(--line);border-radius:6px;padding:6px 8px;max-height:90px;overflow:auto;white-space:pre-wrap;color:#c9cbd3;user-select:text}
+#origBox .tag{color:#7b8ab8}
+body.tl #origBox{display:block}
+.tlonly{display:none!important}
+body.tl .tlonly{display:inline-flex!important}
+#bTl.on{background:#5a3fa8;border-color:#8f6cff}
 .c-n{width:44px}.c-t{width:92px}.c-s{width:110px}.c-a{width:80px}.c-cps{width:42px}
 td.bad{color:#ff7b7b}
 #menu{position:fixed;inset:0;background:#0008;display:none;align-items:flex-start;justify-content:center;z-index:10;padding:60px 12px}
@@ -94,6 +105,9 @@ td.bad{color:#ff7b7b}
   #fActor{flex:1}
   #transport .time{font-size:12px}
   .hide-m{display:none}
+  table.tl td:nth-child(3),table.tl th:nth-child(3){display:none}
+  table.tl col:nth-child(3){width:0}
+  #origBox{max-height:64px;font-size:13px}
 }
 </style>
 </head>
@@ -106,6 +120,7 @@ td.bad{color:#ff7b7b}
     <button id="bSave" class="primary">💾 Zapisz</button>
     <button id="bUndo" title="Ctrl+Z">↶</button>
     <button id="bRedo" title="Ctrl+Y">↷</button>
+    <button id="bTl" title="Tryb tłumacza: oryginał obok, wpisujesz tłumaczenie">🌐 Tłumacz</button>
     <button id="bConv" title="Konwerter MKV → MP4 / wyciąganie napisów">🔄 MKV</button>
     <button id="bMenu">☰</button>
     <span class="sep"></span>
@@ -149,8 +164,11 @@ td.bad{color:#ff7b7b}
         <button id="bSetStart" title="Start = pozycja wideo (Alt+[)">[ start</button>
         <button id="bSetEnd" title="Koniec = pozycja wideo (Alt+])">koniec ]</button>
       </div>
+      <div id="origBox" title="Oryginał (tylko do odczytu)"></div>
       <textarea id="fText" spellcheck="true" placeholder="Tekst linii…"></textarea>
       <div class="row tags">
+        <button class="tlonly" id="bCopyOrig" title="Wstaw tekst oryginału (Ctrl+Shift+C)">⧉ oryginał</button>
+        <button class="tlonly" id="bNextEmpty" title="Następna nieprzetłumaczona (Ctrl+Shift+↓)">→ nieprzetłum.</button>
         <button data-tag="\N">\N</button>
         <button data-wrap="i">kursywa</button>
         <button data-wrap="b">pogrub.</button>
@@ -169,9 +187,9 @@ td.bad{color:#ff7b7b}
     </section>
 
     <section id="gridWrap">
-      <table>
-        <colgroup><col class="c-n"><col class="c-t"><col class="c-t"><col class="c-s col-s"><col class="c-a col-a"><col class="c-cps col-cps"><col></colgroup>
-        <thead><tr><th>#</th><th>Start</th><th>Koniec</th><th class="col-s">Styl</th><th class="col-a">Aktor</th><th class="col-cps">CPS</th><th>Tekst</th></tr></thead>
+      <table id="gridTable">
+        <colgroup><col class="c-n"><col class="c-t"><col class="c-t"><col class="c-s col-s"><col class="c-a col-a"><col class="c-cps col-cps"><col class="col-o"><col></colgroup>
+        <thead><tr><th>#</th><th>Start</th><th>Koniec</th><th class="col-s">Styl</th><th class="col-a">Aktor</th><th class="col-cps">CPS</th><th class="col-o">Oryginał</th><th id="thText">Tekst</th></tr></thead>
         <tbody id="grid"></tbody>
       </table>
     </section>
@@ -181,7 +199,7 @@ td.bad{color:#ff7b7b}
 <div id="menu">
   <div class="card">
     <h3>Plik</h3>
-    <div class="row"><button id="bNew">Nowe napisy</button><button id="bShare">Udostępnij .ass</button></div>
+    <div class="row"><button id="bNew">Nowe napisy</button><button id="bShare">Udostępnij .ass</button><button id="bExportFinal" class="tlonly">Eksport bez oryginału</button></div>
     <h3>Przesuń czasy</h3>
     <div class="row">
       <input id="shiftMs" type="number" value="0" step="10" style="width:110px"> <label>ms</label>
@@ -194,7 +212,7 @@ td.bad{color:#ff7b7b}
       <label><input type="checkbox" id="showSubs" checked> podgląd napisów</label>
     </div>
     <h3>Skróty (klawiatura)</h3>
-    <div style="color:var(--muted);font-size:12px">Spacja (poza polem tekstu) – play/pauza · Alt+↑/↓ – poprz./nast. linia · Enter w tekście – następna linia (Shift+Enter = nowa linia) · Alt+[ / Alt+] – start/koniec z wideo · Alt+P – odtwórz linię · Ctrl+S – zapisz · Ctrl+Z/Y – cofnij/ponów · ←/→ – klatka</div>
+    <div style="color:var(--muted);font-size:12px">Spacja (poza polem tekstu) – play/pauza · Alt+↑/↓ – poprz./nast. linia · Enter w tekście – następna linia (Shift+Enter = nowa linia) · Alt+[ / Alt+] – start/koniec z wideo · Alt+P – odtwórz linię · Ctrl+S – zapisz · Ctrl+Z/Y – cofnij/ponów · ←/→ – klatka<br>Tryb tłumacza: Ctrl+Shift+C – wstaw oryginał · Ctrl+Shift+↓ – następna nieprzetłumaczona</div>
     <div class="row" style="justify-content:flex-end"><button id="bCloseMenu" class="primary">Zamknij</button></div>
   </div>
 </div>
@@ -301,6 +319,19 @@ function parseASS(text){
   }
   // usuń puste linie końcowe z pre
   while(d.pre.length && d.pre[d.pre.length-1].trim()==='') d.pre.pop();
+  // tryb tłumacza: pary [Comment z oryginałem] + [linia tłumaczenia]
+  if(d.events.some(ev=>ev.comment && ev.Effect===ORIG_FX)){
+    const evs = [];
+    for(let i=0;i<d.events.length;i++){
+      const ev = d.events[i];
+      if(ev.comment && ev.Effect===ORIG_FX){
+        const nx = d.events[i+1];
+        if(nx && !(nx.comment && nx.Effect===ORIG_FX)){ nx.orig = ev.Text; evs.push(nx); i++; }
+        else { ev.comment=false; ev.Effect=''; ev.orig=ev.Text; ev.Text=''; evs.push(ev); }
+      } else { ev.orig = ev.orig ?? ''; evs.push(ev); }
+    }
+    d.events = evs; d.tl = true;
+  }
   if(!d.styleOrder.length) d.styleOrder.push('Default');
   return d;
 }
@@ -309,12 +340,20 @@ function splitN(str, n){
   for(let i=0;i<n-1;i++){ const k = rest.indexOf(','); if(k<0){ out.push(rest); rest=''; continue; } out.push(rest.slice(0,k)); rest = rest.slice(k+1); }
   out.push(rest); return out;
 }
-function serializeASS(d){
+const ORIG_FX = 'kaimini-orig';
+function serializeASS(d, final){
   const out = d.pre.slice();
   out.push('', '[Events]', 'Format: ' + d.format.join(', '));
+  const line = ev => (ev.comment?'Comment: ':'Dialogue: ') + d.format.map(k=>ev[k]??'').join(',');
   for(const ev of d.events){
     ev.Start = ms2ass(ev.s); ev.End = ms2ass(ev.e);
-    out.push((ev.comment?'Comment: ':'Dialogue: ') + d.format.map(k=>ev[k]??'').join(','));
+    if(d.tl && !final){
+      // oryginał zapisany jako komentarz tuż przed linią – odtwarzacze go nie pokazują, KaiMini wczytuje z powrotem
+      out.push(line({...ev, comment:true, Effect:ORIG_FX, Text:ev.orig||''}));
+      out.push(line(ev));
+    } else if(d.tl && final){
+      out.push(line({...ev, Text: isEmptyTl(ev) ? (ev.orig||'') : ev.Text}));
+    } else out.push(line(ev));
   }
   if(d.post.length){ out.push(''); out.push(...d.post); }
   return out.join('\r\n') + '\r\n';
@@ -339,19 +378,20 @@ function mkEvent(d, s, e, text, style){
   ev.Layer = '0'; ev.Style = style || d.styleOrder[0] || 'Default';
   ev.MarginL = ev.MarginR = ev.MarginV = '0';
   ev.s = s; ev.e = e; ev.Text = text;
+  if(d.tl) ev.orig = '';
   return ev;
 }
 const cloneEv = ev => JSON.parse(JSON.stringify(ev));
 
 /* ---------- undo ---------- */
 function snapshot(){
-  undoStack.push(JSON.stringify({ev:doc.events, sel}));
+  undoStack.push(JSON.stringify({ev:doc.events, sel, tl:!!doc.tl}));
   if(undoStack.length>100) undoStack.shift();
   redoStack = []; markDirty();
 }
-function undo(){ if(!undoStack.length) return; redoStack.push(JSON.stringify({ev:doc.events,sel})); restoreSnap(undoStack.pop()); }
-function redo(){ if(!redoStack.length) return; undoStack.push(JSON.stringify({ev:doc.events,sel})); restoreSnap(redoStack.pop()); }
-function restoreSnap(s){ const o = JSON.parse(s); doc.events = o.ev; sel = Math.min(o.sel, doc.events.length-1); textSnapTaken=false; renderGrid(); loadEdit(); markDirty(); }
+function undo(){ if(!undoStack.length) return; redoStack.push(JSON.stringify({ev:doc.events, sel, tl:!!doc.tl})); restoreSnap(undoStack.pop()); }
+function redo(){ if(!redoStack.length) return; undoStack.push(JSON.stringify({ev:doc.events, sel, tl:!!doc.tl})); restoreSnap(redoStack.pop()); }
+function restoreSnap(s){ const o = JSON.parse(s); doc.events = o.ev; doc.tl = !!o.tl; applyTlUi(); sel = Math.min(o.sel, doc.events.length-1); textSnapTaken=false; renderGrid(); loadEdit(); markDirty(); }
 
 /* ---------- autozapis ---------- */
 const LS_KEY = 'kaimini-draft';
@@ -377,8 +417,10 @@ function plain(t){ return t.replace(/\{[^}]*\}/g,'').replace(/\\N/g,' ⏎ ').rep
 function cps(ev){ const n = ev.Text.replace(/\{[^}]*\}/g,'').replace(/\\[Nnh]/g,'').replace(/\s/g,'').length; const d=(ev.e-ev.s)/1000; return d>0?Math.round(n/d):0; }
 function rowHTML(ev,i){
   const c = cps(ev);
-  return `<td class="n">${i+1}</td><td class="t">${ms2ass(ev.s)}</td><td class="t">${ms2ass(ev.e)}</td><td class="col-s">${esc(ev.Style)}</td><td class="col-a">${esc(ev.Name||'')}</td><td class="col-cps ${c>20?'bad':''}">${c}</td><td>${esc(plain(ev.Text))}</td>`;
+  return `<td class="n">${i+1}</td><td class="t">${ms2ass(ev.s)}</td><td class="t">${ms2ass(ev.e)}</td><td class="col-s">${esc(ev.Style)}</td><td class="col-a">${esc(ev.Name||'')}</td><td class="col-cps ${c>20?'bad':''}">${c}</td><td class="col-o">${esc(plain(ev.orig||''))}</td><td class="${doc.tl&&isEmptyTl(ev)?'tlempty':''}">${esc(plain(ev.Text))}</td>`;
 }
+function isEmptyTl(ev){ return plain(ev.Text).replace(/⏎/g,'').trim()===''; }
+function tlStats(){ const n=doc.events.length; let done=0; doc.events.forEach(ev=>{ if(!isEmptyTl(ev)) done++; }); return {done,n}; }
 function esc(s){ return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function renderGrid(){
   const frag = document.createDocumentFragment();
@@ -427,8 +469,18 @@ function loadEdit(){
   $('fComment').checked = !!ev.comment;
   $('fStart').value = ms2ass(ev.s); $('fEnd').value = ms2ass(ev.e); $('fDur').value = ms2ass(ev.e-ev.s);
   $('fText').value = ev.Text;
-  $('lineInfo').textContent = `linia ${sel+1}/${doc.events.length} · CPS ${cps(ev)}`;
+  renderOrig(ev); updateInfo();
   renderOverlay();
+}
+function renderOrig(ev){
+  if(!doc.tl) return;
+  $('origBox').innerHTML = (ev.orig ? esc(ev.orig).replace(/\{[^}]*\}/g, m=>`<span class="tag">${m}</span>`).replace(/\\N/g,'\\N\n') : '<i style="color:var(--muted)">(brak oryginału)</i>');
+}
+function updateInfo(){
+  const ev = doc.events[sel]; if(!ev) return;
+  let t = `linia ${sel+1}/${doc.events.length} · CPS ${cps(ev)}`;
+  if(doc.tl){ const st=tlStats(); t += ` · przetłum. ${st.done}/${st.n}`; }
+  $('lineInfo').textContent = t;
 }
 function edit(fn){ snapshot(); fn(doc.events[sel]); updateRow(sel); loadEdit(); }
 
@@ -436,8 +488,7 @@ $('fText').addEventListener('input', ()=>{
   if(!textSnapTaken){ snapshot(); textSnapTaken = true; }
   const ev = doc.events[sel]; ev.Text = $('fText').value.replace(/\r?\n/g,'\\N');
   if(ev.Text !== $('fText').value){ const p=$('fText').selectionStart; $('fText').value = ev.Text; $('fText').selectionStart=$('fText').selectionEnd=p+1; }
-  updateRow(sel); markDirty(); renderOverlay();
-  $('lineInfo').textContent = `linia ${sel+1}/${doc.events.length} · CPS ${cps(ev)}`;
+  updateRow(sel); markDirty(); renderOverlay(); updateInfo();
 });
 $('fText').addEventListener('keydown', e=>{
   if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); nextOrNew(); }
@@ -482,6 +533,7 @@ $('bPrev').onclick = ()=> select(sel-1, true);
 $('bNext').onclick = ()=> select(sel+1, true);
 function nextOrNew(){
   if(sel < doc.events.length-1) return select(sel+1, true);
+  if(doc.tl){ toast('To ostatnia linia'); return; }
   insertAfter();
 }
 function insertAfter(){
@@ -609,10 +661,12 @@ function renderOverlay(){
     const st = doc.styles[ev.Style] || {};
     let an = +(st.Alignment||2);
     const anTag = ev.Text.match(/\\an([1-9])/); if(anTag) an = +anTag[1];
-    let txt = ev.Text;
+    let txt = ev.Text, dim = false;
+    if(doc.tl && isEmptyTl(ev)){ txt = ev.orig||''; dim = true; }
     const div = document.createElement('div'); div.className='sub';
     // kursywa/pogrubienie – proste mapowanie
     let html = '', i=0, it=st.Italic==='-1'||st.Italic==='1', bd=st.Bold==='-1'||st.Bold==='1';
+    if(dim) div.style.opacity = '.5';
     const parts = txt.split(/(\{[^}]*\})/);
     let open = 0;
     for(const p of parts){
@@ -658,8 +712,57 @@ function loadDoc(d, name){
   doc = d; fileName = name || 'napisy.ass'; sel = 0; undoStack=[]; redoStack=[];
   if(!doc.events.length) doc.events.push(mkEvent(doc,0,2000,''));
   $('fname').textContent = fileName;
+  applyTlUi();
   renderGrid(); loadEdit(); dirty=false;
 }
+/* ---------- tryb tłumacza ---------- */
+function applyTlUi(){
+  const on = !!doc.tl;
+  document.body.classList.toggle('tl', on);
+  $('gridTable').classList.toggle('tl', on);
+  $('bTl').classList.toggle('on', on);
+  $('thText').textContent = on ? 'Tłumaczenie' : 'Tekst';
+  $('fText').placeholder = on ? 'Wpisz tłumaczenie… (Enter = następna linia)' : 'Tekst linii…';
+}
+$('bTl').onclick = ()=>{
+  if(!doc.tl){
+    if(!confirm('Włączyć tryb tłumacza?\n\nObecny tekst linii stanie się oryginałem (widocznym nad polem edycji), a pole tekstu będzie puste na tłumaczenie. Tagi z początku linii (np. {\\an8}) zostaną zachowane.')) return;
+    snapshot();
+    doc.tl = true;
+    doc.events.forEach(ev=>{ ev.orig = ev.Text; const m = ev.Text.match(/^(\{[^}]*\})+/); ev.Text = m ? m[0] : ''; });
+    applyTlUi(); renderGrid(); loadEdit(); markDirty();
+    toast('Tryb tłumacza włączony');
+    $('fText').focus();
+  } else {
+    const st = tlStats();
+    if(!confirm(`Zakończyć tryb tłumacza?\n\nPrzetłumaczono ${st.done}/${st.n} linii. Nieprzetłumaczone linie dostaną tekst oryginału, a oryginały zostaną usunięte z pliku.`)) return;
+    snapshot();
+    doc.events.forEach(ev=>{ if(isEmptyTl(ev)) ev.Text = ev.orig||''; delete ev.orig; });
+    doc.tl = false;
+    applyTlUi(); renderGrid(); loadEdit(); markDirty();
+    toast('Tryb tłumacza wyłączony');
+  }
+};
+$('bCopyOrig').onclick = ()=>{ const ev=doc.events[sel]; if(!ev||!doc.tl) return; snapshot(); ev.Text = ev.orig||''; updateRow(sel); loadEdit(); $('fText').focus(); };
+function nextEmpty(){
+  const n = doc.events.length;
+  for(let k=1;k<=n;k++){ const i=(sel+k)%n; if(isEmptyTl(doc.events[i])){ select(i,true); $('fText').focus(); return; } }
+  toast('Wszystko przetłumaczone 🎉');
+}
+$('bNextEmpty').onclick = nextEmpty;
+$('bExportFinal').onclick = ()=>{
+  const st = tlStats();
+  if(st.done<st.n && !confirm(`Nieprzetłumaczone linie: ${st.n-st.done}. Zostaną zapisane z tekstem oryginału. Kontynuować?`)) return;
+  downloadText(serializeASS(doc, true), fileName.replace(/\.ass$/i,'')+'_final.ass');
+  toast('Wyeksportowano gotowe tłumaczenie');
+};
+function downloadText(text, name){
+  const blob = new Blob(['\uFEFF'+text], {type:'text/plain;charset=utf-8'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 5000);
+}
+
 function save(){
   const blob = new Blob(['\uFEFF'+serializeASS(doc)], {type:'text/plain;charset=utf-8'});
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = fileName;
@@ -686,6 +789,8 @@ document.addEventListener('keydown', e=>{
   const inField = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
   const ctrl = e.ctrlKey||e.metaKey;
   if(ctrl && e.key.toLowerCase()==='s'){ e.preventDefault(); save(); return; }
+  if(doc.tl && ctrl && e.shiftKey && e.key.toLowerCase()==='c'){ e.preventDefault(); $('bCopyOrig').click(); return; }
+  if(doc.tl && ctrl && e.shiftKey && e.key==='ArrowDown'){ e.preventDefault(); nextEmpty(); return; }
   if(ctrl && e.key.toLowerCase()==='z' && !e.shiftKey && document.activeElement!==$('fText')){ e.preventDefault(); undo(); return; }
   if(ctrl && (e.key.toLowerCase()==='y' || (e.key.toLowerCase()==='z'&&e.shiftKey))){ e.preventDefault(); redo(); return; }
   if(e.altKey){
@@ -866,7 +971,7 @@ $('cvLoadSubs').onclick = async ()=>{
 };
 
 /* ---------- tryb offline (PWA) ---------- */
-const APP_VERSION = '1.2';
+const APP_VERSION = '1.3';
 $('ver').textContent = 'v'+APP_VERSION;
 if('serviceWorker' in navigator && window.isSecureContext && location.protocol!=='file:'){
   navigator.serviceWorker.register('sw.js').then(reg=>{
